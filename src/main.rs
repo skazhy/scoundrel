@@ -26,10 +26,7 @@ impl Card {
     }
 
     fn is_potion(self) -> bool {
-        match self.suit {
-            Suit::Potion => true,
-            _ => false
-        }
+        matches!(self.suit, Suit::Potion)
     }
 }
 
@@ -95,8 +92,6 @@ fn main() {
         });
     }
 
-    let mut can_avoid_room = true;
-
     let mut rng = thread_rng();
     cards.shuffle(&mut rng);
 
@@ -104,8 +99,11 @@ fn main() {
     let mut room_size: usize = 4;
     let mut room: Vec<Card> = cards.drain(..room_size).collect();
 
+    let mut can_avoid_room = cards.len() > 4;
+
     loop {
-        println!("=== Remaining cards: {}", cards.len());
+        let rooms_remaining = if cards.len() == 0 { 0 } else { cards.len() / 3 + 1 };
+        println!("=== Remaining cards: {} | Remaining rooms: {rooms_remaining}", cards.len());
 
         loop {
             print!("=== Health: {health}");
@@ -163,7 +161,7 @@ fn main() {
                 last_card = Some(room.remove(input));
             }
 
-            if room.len() == 1 && cards.len() > 3 || room.is_empty() || health == 0 {
+            if (room.len() == 1 && !cards.is_empty()) || room.is_empty() || health == 0 {
                 break;
             }
         }
@@ -190,7 +188,7 @@ fn main() {
 
             score = health;
             if let Some(c) = last_card {
-                if c.is_potion() {
+                if c.is_potion() && health == 20 {
                     score += c.value;
                 }
             }
