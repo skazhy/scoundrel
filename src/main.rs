@@ -12,7 +12,7 @@ enum Suit {
 
 #[derive(Debug, Clone, Copy)]
 struct Card {
-    value: i8,
+    value: i32,
     suit: Suit,
 }
 
@@ -22,6 +22,13 @@ impl Card {
             Suit::Monster => format!("Monster {}", self.value),
             Suit::Weapon => format!("Weapon {}", self.value),
             Suit::Potion => format!("Potion: {}", self.value),
+        }
+    }
+
+    fn is_potion(self) -> bool {
+        match self.suit {
+            Suit::Potion => true,
+            _ => false
         }
     }
 }
@@ -49,7 +56,9 @@ fn read_integer(options: &[String]) -> usize {
 fn main() {
     let mut cards: Vec<Card> = Vec::with_capacity(44);
     let mut health = 20;
+    let mut last_card: Option<Card> = None;
     let mut weapon = 0;
+    let mut score: i32 = -208;
     let mut weapon_bound = 14;
     let fight_opts = vec![
         String::from("Fight barehanded"),
@@ -148,9 +157,10 @@ fn main() {
                             // Barehanded
                             health = cmp::max(0, health - room[input].value);
                         }
+                        score += room[input].value;
                     }
                 }
-                room.remove(input);
+                last_card = Some(room.remove(input));
             }
 
             if room.len() == 1 && cards.len() > 3 || room.is_empty() || health == 0 {
@@ -177,10 +187,18 @@ fn main() {
         // Win
         if cards.is_empty() {
             println!("You win!");
+
+            score = health;
+            if let Some(c) = last_card {
+                if c.is_potion() {
+                    score += c.value;
+                }
+            }
             break;
         }
 
         room.append(&mut cards.drain(..cmp::min(3, room_size)).collect());
         can_avoid_room = cards.len() >= 4;
     }
+    println!("Your score: {score}");
 }
