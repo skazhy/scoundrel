@@ -30,6 +30,18 @@ impl Card {
 }
 
 #[derive(Debug)]
+pub enum Step {
+    RoomChoice,
+    PlayCard,
+}
+
+#[derive(Debug)]
+pub enum FightMode {
+    Barehanded,
+    Weapon,
+}
+
+#[derive(Debug)]
 pub struct Game {
     pub health: i32,
     pub weapon: i32,
@@ -37,8 +49,8 @@ pub struct Game {
     score: i32,
     deck: Vec<Card>,
     room: Vec<Card>,
-    can_avoid_room: bool,
     last_card: Option<Card>,
+    step: Step,
 }
 
 impl Game {
@@ -86,8 +98,8 @@ impl Game {
             score: -208, // TODO: calc from cards in deck.
             deck: cards,
             room,
-            can_avoid_room: true,
             last_card: None,
+            step: Step::RoomChoice,
         }
     }
 
@@ -97,6 +109,27 @@ impl Game {
         } else {
             self.deck.len() / 3 + 1
         }
+    }
+
+    pub fn can_avoid_room(&mut self) -> bool {
+        matches!(self.step, Step::RoomChoice)
+    }
+
+    pub fn needs_fight_mode(&mut self, idx: usize) -> bool {
+        let played = self.room[idx];
+        matches!(played.suit, Suit::Monster) && self.weapon_bound >= played.value && self.weapon > 0
+    }
+
+    pub fn avoid_room(&mut self) {
+        let mut rng = thread_rng();
+        self.room.shuffle(&mut rng);
+        self.deck.append(&mut self.room);
+        self.room = self.deck.drain(..4).collect();
+        self.step = Step::PlayCard;
+    }
+
+    pub fn play_room(&mut self) {
+        self.step = Step::PlayCard;
     }
 
     pub fn deck_len(&mut self) -> usize {
@@ -110,22 +143,10 @@ impl Game {
             inputs.push(r.formatted());
         }
 
-        if self.can_avoid_room && self.room.len() == 4 {
-            inputs.push(String::from("Avoid this room"));
-        }
         inputs
     }
 
-    pub fn maybe_end_turn(&mut self, input: usize) -> bool {
-        if input == 4 {
-            let mut rng = thread_rng();
-            self.can_avoid_room = false;
-            self.room.shuffle(&mut rng);
-            self.deck.append(&mut self.room);
-            self.room = self.deck.drain(..4).collect();
-            return true;
-        }
-
+    pub fn maybe_end_turn(&mut self) -> bool {
         if self.health == 0 || self.room.is_empty() {
             return true;
         }
@@ -134,7 +155,10 @@ impl Game {
             let new_card_count = cmp::min(3, self.deck.len());
             self.room
                 .append(&mut self.deck.drain(..new_card_count).collect());
-            self.can_avoid_room = self.deck.len() >= 4;
+
+            if self.deck.len() >= 4 {
+                self.step = Step::RoomChoice;
+            }
             return true;
         }
         false
@@ -164,10 +188,7 @@ impl Game {
         false
     }
 
-    pub fn play_card<F>(&mut self, idx: usize, mut request_fight_choice: F)
-    where
-        F: FnMut() -> usize,
-    {
+    pub fn play_card(&mut self, idx: usize, fight_mode: FightMode) {
         let played = self.room.remove(idx);
 
         match played.suit {
@@ -179,20 +200,15 @@ impl Game {
                 self.weapon_bound = 14;
             }
             Suit::Monster => {
-                if self.weapon_bound >= played.value && self.weapon > 0 {
-                    let fight_opt = request_fight_choice();
-                    // Barehanded
-                    if fight_opt == 0 {
-                        self.health = cmp::max(0, self.health - played.value);
-                    // With a weapon
-                    } else {
+                match fight_mode {
+                    FightMode::Weapon => {
                         self.health =
                             (self.health + self.weapon - played.value).clamp(0, self.health);
                         self.weapon_bound = played.value;
                     }
-                } else {
-                    // Barehanded
-                    self.health = cmp::max(0, self.health - played.value);
+                    FightMode::Barehanded => {
+                        self.health = cmp::max(0, self.health - played.value);
+                    }
                 }
                 self.score += played.value;
             }
